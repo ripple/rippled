@@ -311,16 +311,19 @@ public:
         test::jtx::Env env{*this, makeConfig()};
         std::unique_ptr<AmendmentTable> table = makeTable(env, weeks(2));
 
-        // Note which entries are enabled.
+        // Note which entries are pre-enabled
         std::set<uint256> allEnabled;
+        for (auto const& a : enabled_)
+            allEnabled.insert(amendmentId(a));
 
-        // Subset of amendments to enable
-        allEnabled.insert(amendmentId(supported_[0]));
-        allEnabled.insert(amendmentId(enabled_[0]));
-        allEnabled.insert(amendmentId(vetoed_[0]));
+        // Subset of amendments to late-enable
+        std::set<uint256> lateEnabled;
+        lateEnabled.insert(amendmentId(supported_[0]));
+        lateEnabled.insert(amendmentId(vetoed_[0]));
 
-        for (uint256 const& a : allEnabled)
-            table->enable(a);
+        // Do the late enabling.
+        for (uint256 const& a : lateEnabled)
+            BEAST_EXPECT(table->enable(a));
 
         // So far all enabled amendments are supported.
         BEAST_EXPECT(!table->hasUnsupportedEnabled());
@@ -347,14 +350,14 @@ public:
             // Unveto an amendment that is already not vetoed.  Shouldn't
             // hurt anything, but the values returned by getDesired()
             // shouldn't change.
-            table->unVeto(amendmentId(supported_[1]));
+            BEAST_EXPECT(!table->unVeto(amendmentId(supported_[1])));
             BEAST_EXPECT(desired == table->getDesired());
         }
 
         // UnVeto one of the vetoed amendments.  It should now be desired.
         {
             uint256 const unvetoedID = amendmentId(vetoed_[0]);
-            table->unVeto(unvetoedID);
+            BEAST_EXPECT(table->unVeto(unvetoedID));
 
             std::vector<uint256> const desired = table->getDesired();
             BEAST_EXPECT(
