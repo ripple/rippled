@@ -164,6 +164,23 @@ public:
     {
         return false;
     }
+    bool
+    txReduceRelayEnabled() const override
+    {
+        return false;
+    }
+    void
+    sendTxQueue() override
+    {
+    }
+    void
+    addTxQueue(const uint256&) override
+    {
+    }
+    void
+    removeTxQueue(const uint256&) override
+    {
+    }
 };
 
 /** Manually advanced clock. */

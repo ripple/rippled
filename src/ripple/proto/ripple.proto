@@ -29,6 +29,8 @@ enum MessageType
     mtPROOF_PATH_RESPONSE   = 58;
     mtREPLAY_DELTA_REQ      = 59;
     mtREPLAY_DELTA_RESPONSE = 60;
+    mtHAVE_TRANSACTIONS     = 61;
+    mtTRANSACTIONS          = 62;
 }
 
 // token, iterations, target, challenge = issue demand for proof of work
@@ -143,6 +145,11 @@ message TMTransaction
     required TransactionStatus status       = 2;
     optional uint64 receiveTimestamp        = 3;
     optional bool deferred                  = 4;    // not applied to open ledger
+}
+
+message TMTransactions
+{
+    repeated TMTransaction transactions = 1;
 }
 
 
@@ -285,6 +292,7 @@ message TMGetObjectByHash
         otSTATE_NODE        = 4;
         otCAS_OBJECT        = 5;
         otFETCH_PACK        = 6;
+        otTRANSACTIONS      = 7;
     }
 
     required ObjectType type            = 1;
@@ -404,5 +412,10 @@ message TMReplayDeltaResponse
     optional bytes ledgerHeader = 2;
     repeated bytes transaction = 3;
     optional TMReplyError error = 4;
+}
+
+message TMHaveTransactions
+{
+    repeated bytes hash = 1;
 }
 

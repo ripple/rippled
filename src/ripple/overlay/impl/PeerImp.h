@@ -24,6 +24,7 @@
 #include <ripple/app/ledger/impl/LedgerReplayMsgHandler.h>
 #include <ripple/basics/Log.h>
 #include <ripple/basics/RangeSet.h>
+#include <ripple/basics/UnorderedContainers.h>
 #include <ripple/beast/utility/WrappedSink.h>
 #include <ripple/overlay/Squelch.h>
 #include <ripple/overlay/impl/OverlayImpl.h>
@@ -170,6 +171,13 @@ private:
     hash_map<PublicKey, ShardInfo> shardInfo_;
 
     Compressed compressionEnabled_ = Compressed::Off;
+
+    // Queue of transactions' hashes that have not been
+    // relayed. The hashes are sent once a second to a peer
+    // and the peer requests missing transactions from the node.
+    hash_set<uint256> txQueue_;
+    // true if tx reduce-relay feature is enabled on the peer.
+    bool txReduceRelayEnabled_ = false;
     // true if validation/proposal reduce-relay feature is enabled
     // on the peer.
     bool vpReduceRelayEnabled_ = false;
@@ -271,6 +279,22 @@ public:
 
     void
     send(std::shared_ptr<Message> const& m) override;
+
+    /** Send aggregated transactions' hashes */
+    void
+    sendTxQueue() override;
+
+    /** Add transaction's hash to the transactions' hashes queue
+       @param hash transaction's hash
+     */
+    void
+    addTxQueue(uint256 const& hash) override;
+
+    /** Remove transaction's hash from the transactions' hashes queue
+       @param hash transaction's hash
+     */
+    void
+    removeTxQueue(uint256 const& hash) override;
 
     /** Send a set of PeerFinder endpoints as a protocol message. */
     template <
@@ -411,6 +435,12 @@ public:
         return compressionEnabled_ == Compressed::On;
     }
 
+    bool
+    txReduceRelayEnabled() const override
+    {
+        return txReduceRelayEnabled_;
+    }
+
 private:
     void
     close();
@@ -465,6 +495,28 @@ private:
     // Called when protocol messages bytes are sent
     void
     onWriteMessage(error_code ec, std::size_t bytes_transferred);
+
+    /** Called from onMessage(TMTransaction(s)).
+       @param m Transaction protocol message
+       @param eraseTxQueue is true when called from onMessage(TMTransaction)
+       and is false when called from onMessage(TMTransactions). If true then
+       the transaction hash is erased from txQueue_. Don't need to erase from
+       the queue when called from onMessage(TMTransactions) because this
+       message is a response to the missing transactions request and the queue
+       would not have any of these transactions.
+     */
+    void
+    handleTransaction(
+        std::shared_ptr<protocol::TMTransaction> const& m,
+        bool eraseTxQueue);
+
+    /** Handle protocol message with hashes of transactions that have not
+       been relayed by an upstream node down to its peers - request
+       transactions, which have not been relayed to this peer.
+       @param m protocol message with transactions' hashes
+     */
+    void
+    haveTransactions(std::shared_ptr<protocol::TMHaveTransactions> const& m);
 
     // Check if reduce-relay feature is enabled and
     // reduce_relay::WAIT_ON_BOOTUP time passed since the start
@@ -531,6 +583,10 @@ public:
     void
     onMessage(std::shared_ptr<protocol::TMGetObjectByHash> const& m);
     void
+    onMessage(std::shared_ptr<protocol::TMHaveTransactions> const& m);
+    void
+    onMessage(std::shared_ptr<protocol::TMTransactions> const& m);
+    void
     onMessage(std::shared_ptr<protocol::TMSquelch> const& m);
     void
     onMessage(std::shared_ptr<protocol::TMProofPathRequest> const& m);
@@ -559,6 +615,13 @@ private:
         std::string const& manifest,
         std::uint32_t version,
         std::vector<ValidatorBlobInfo> const& blobs);
+
+    /** Process peer's request to send missing transactions. The request is
+        sent in response to TMHaveTransactions.
+        @param packet protocol message containing missing transactions' hashes.
+     */
+    void
+    doTransactions(std::shared_ptr<protocol::TMGetObjectByHash> const& packet);
 
     void
     checkTransaction(
@@ -630,6 +693,10 @@ PeerImp::PeerImp(
               app_.config().COMPRESSION)
               ? Compressed::On
               : Compressed::Off)
+    , txReduceRelayEnabled_(peerFeatureEnabled(
+          headers_,
+          FEATURE_TXRR,
+          app_.config().TX_REDUCE_RELAY_ENABLE))
     , vpReduceRelayEnabled_(peerFeatureEnabled(
           headers_,
           FEATURE_VPRR,
