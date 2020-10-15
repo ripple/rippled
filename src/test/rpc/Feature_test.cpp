@@ -56,7 +56,12 @@ class Feature_test : public beast::unit_test::suite
         {
             auto const registered = getRegisteredFeature(feature);
             if (BEAST_EXPECT(registered))
+            {
                 BEAST_EXPECT(featureToName(*registered) == feature);
+                BEAST_EXPECT(
+                    bitsetIndexToFeature(featureToBitsetIndex(*registered)) ==
+                    *registered);
+            }
         }
 
         // Test an arbitrary unknown feature
@@ -65,6 +70,16 @@ class Feature_test : public beast::unit_test::suite
         BEAST_EXPECT(
             featureToName(zero) ==
             "0000000000000000000000000000000000000000000000000000000000000000");
+
+        // Test a random sampling of the variables. If any of these get retired
+        // or removed, swap out for any other feature.
+        BEAST_EXPECT(featureToName(featureOwnerPaysFee) == "OwnerPaysFee");
+        BEAST_EXPECT(featureToName(featureFlow) == "Flow");
+        BEAST_EXPECT(featureToName(featureNegativeUNL) == "NegativeUNL");
+        BEAST_EXPECT(featureToName(fix1578) == "fix1578");
+        BEAST_EXPECT(
+            featureToName(fixTakerDryOfferRemoval) ==
+            "fixTakerDryOfferRemoval");
     }
 
     void
@@ -114,6 +129,9 @@ class Feature_test : public beast::unit_test::suite
         BEAST_EXPECTS(jrr[jss::status] == jss::success, "status");
         jrr.removeMember(jss::status);
         BEAST_EXPECT(jrr.size() == 1);
+        BEAST_EXPECT(
+            jrr.isMember("586480873651E106F1D6339B0C4A8945BA705A777F3F4524626FF"
+                         "1FC07EFE41D"));
         auto feature = *(jrr.begin());
 
         BEAST_EXPECTS(feature[jss::name] == "MultiSignReserve", "name");
@@ -282,7 +300,9 @@ class Feature_test : public beast::unit_test::suite
             BEAST_EXPECT(feature[jss::count] == (expectVeto ? 0 : 1));
             BEAST_EXPECT(feature[jss::threshold] == 1);
             BEAST_EXPECT(feature[jss::validations] == 1);
-            BEAST_EXPECT(expectVeto || feature[jss::majority] == 2740);
+            BEAST_EXPECTS(
+                expectVeto || feature[jss::majority] == 2540,
+                "Majority: " + feature[jss::majority].asString());
         }
     }
 
