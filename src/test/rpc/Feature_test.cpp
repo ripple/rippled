@@ -27,22 +27,6 @@ namespace ripple {
 class Feature_test : public beast::unit_test::suite
 {
     void
-    testDownVotesSupported()
-    {
-        testcase("internal vetoes are all supported");
-
-        auto const supported = ripple::detail::supportedAmendments();
-        auto const vetoed = ripple::detail::downVotedAmendments();
-
-        for (auto const& veto : vetoed)
-        {
-            BEAST_EXPECTS(
-                std::count(supported.begin(), supported.end(), veto) == 1,
-                veto);
-        }
-    }
-
-    void
     testFeatureToName()
     {
         testcase("featureToName");
@@ -52,8 +36,9 @@ class Feature_test : public beast::unit_test::suite
         // way.
         auto const supported = ripple::detail::supportedAmendments();
 
-        for (auto const& feature : supported)
+        for (auto const& [feature, vote] : supported)
         {
+            (void)vote;
             auto const registered = getRegisteredFeature(feature);
             if (BEAST_EXPECT(registered))
             {
@@ -90,8 +75,8 @@ class Feature_test : public beast::unit_test::suite
         using namespace test::jtx;
         Env env{*this};
 
-        std::vector<std::string> const& vetoed =
-            ripple::detail::downVotedAmendments();
+        std::map<std::string, DefaultVote> const& votes =
+            ripple::detail::supportedAmendments();
 
         auto jrr = env.rpc("feature")[jss::result];
         if (!BEAST_EXPECT(jrr.isMember(jss::features)))
@@ -103,8 +88,7 @@ class Feature_test : public beast::unit_test::suite
             // default config - so all should be disabled, and
             // supported. Some may be vetoed.
             bool expectVeto =
-                std::count(vetoed.begin(), vetoed.end(), feature[jss::name]) >
-                0;
+                !(votes.at(feature[jss::name].asString()) == DefaultVote::yes);
             BEAST_EXPECTS(
                 !feature[jss::enabled].asBool(),
                 feature[jss::name].asString() + " enabled");
@@ -186,8 +170,8 @@ class Feature_test : public beast::unit_test::suite
         Env env{
             *this, FeatureBitset(featureDepositAuth, featureDepositPreauth)};
 
-        std::vector<std::string> const& vetoed =
-            ripple::detail::downVotedAmendments();
+        std::map<std::string, DefaultVote> const& votes =
+            ripple::detail::supportedAmendments();
 
         auto jrr = env.rpc("feature")[jss::result];
         if (!BEAST_EXPECT(jrr.isMember(jss::features)))
@@ -204,7 +188,7 @@ class Feature_test : public beast::unit_test::suite
             bool expectSupported =
                 env.app().getAmendmentTable().isSupported(id);
             bool expectVeto =
-                std::count(vetoed.begin(), vetoed.end(), (*it)[jss::name]) > 0;
+                !(votes.at((*it)[jss::name].asString()) == DefaultVote::yes);
             BEAST_EXPECTS(
                 (*it)[jss::enabled].asBool() == expectEnabled,
                 (*it)[jss::name].asString() + " enabled");
@@ -268,8 +252,8 @@ class Feature_test : public beast::unit_test::suite
         // There should be at least 5 amendments.  Don't do exact comparison
         // to avoid maintenance as more amendments are added in the future.
         BEAST_EXPECT(majorities.size() >= 5);
-        std::vector<std::string> const& vetoed =
-            ripple::detail::downVotedAmendments();
+        std::map<std::string, DefaultVote> const& votes =
+            ripple::detail::supportedAmendments();
 
         jrr = env.rpc("feature")[jss::result];
         if (!BEAST_EXPECT(jrr.isMember(jss::features)))
@@ -279,8 +263,7 @@ class Feature_test : public beast::unit_test::suite
             if (!BEAST_EXPECT(feature.isMember(jss::name)))
                 return;
             bool expectVeto =
-                std::count(vetoed.begin(), vetoed.end(), feature[jss::name]) >
-                0;
+                !(votes.at(feature[jss::name].asString()) == DefaultVote::yes);
             BEAST_EXPECTS(
                 expectVeto ^ feature.isMember(jss::majority),
                 feature[jss::name].asString() + " majority");
@@ -354,7 +337,6 @@ public:
     void
     run() override
     {
-        testDownVotesSupported();
         testFeatureToName();
         testNoParams();
         testSingleFeature();

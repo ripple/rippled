@@ -28,8 +28,6 @@ namespace ripple {
 
 enum class Supported : bool { no = false, yes };
 
-enum class DefaultVote : bool { no = false, yes };
-
 namespace detail {
 // *NOTE*
 //
@@ -72,9 +70,9 @@ class FeatureCollections
     std::vector<Feature> features;
     boost::container::flat_map<uint256, std::size_t> featureToIndex;
     boost::container::flat_map<std::string, uint256> nameToFeature;
-    std::vector<std::string> supported;
-    std::vector<std::string> upVote;
-    std::vector<std::string> downVote;
+    std::map<std::string, DefaultVote> supported;
+    std::size_t upVotes = 0;
+    std::size_t downVotes = 0;
     mutable std::atomic<bool> readOnly = false;
 
 public:
@@ -101,24 +99,24 @@ public:
     /** Amendments that this server supports.
     Whether they are enabled depends on the Rules defined in the validated
     ledger */
-    std::vector<std::string> const&
+    std::map<std::string, DefaultVote> const&
     supportedAmendments() const
     {
         return supported;
     }
 
     /** Amendments that this server WON'T vote for by default. */
-    std::vector<std::string> const&
-    downVotedAmendments() const
+    std::size_t
+    numDownVotedAmendments() const
     {
-        return downVote;
+        return downVotes;
     }
 
     /** Amendments that this server WILL vote for by default. */
-    std::vector<std::string> const&
-    upVotedAmendments() const
+    std::size_t
+    numUpVotedAmendments() const
     {
-        return upVote;
+        return upVotes;
     }
 };
 
@@ -131,9 +129,6 @@ detail::FeatureCollections::FeatureCollections()
     features.reserve(ripple::detail::numFeatures);
     featureToIndex.reserve(ripple::detail::numFeatures);
     nameToFeature.reserve(ripple::detail::numFeatures);
-    supported.reserve(ripple::detail::numFeatures);
-    upVote.reserve(ripple::detail::numFeatures);
-    downVote.reserve(ripple::detail::numFeatures);
 }
 
 std::optional<uint256>
@@ -185,14 +180,14 @@ detail::FeatureCollections::registerFeature(
 
         if (support == Supported::yes)
         {
-            supported.emplace_back(name);
+            supported.emplace(name, vote);
 
             if (vote == DefaultVote::yes)
-                upVote.emplace_back(name);
+                ++upVotes;
             else
-                downVote.emplace_back(name);
+                ++downVotes;
         }
-        assert(upVote.size() + downVote.size() == supported.size());
+        assert(upVotes + downVotes == supported.size());
         assert(supported.size() <= features.size());
         return f;
     }
@@ -232,24 +227,24 @@ static detail::FeatureCollections featureCollections;
 /** Amendments that this server supports.
    Whether they are enabled depends on the Rules defined in the validated
    ledger */
-std::vector<std::string> const&
+std::map<std::string, DefaultVote> const&
 detail::supportedAmendments()
 {
     return featureCollections.supportedAmendments();
 }
 
 /** Amendments that this server won't vote for by default. */
-std::vector<std::string> const&
-detail::downVotedAmendments()
+std::size_t
+detail::numDownVotedAmendments()
 {
-    return featureCollections.downVotedAmendments();
+    return featureCollections.numDownVotedAmendments();
 }
 
 /** Amendments that this server will vote for by default. */
-std::vector<std::string> const&
-detail::upVotedAmendments()
+std::size_t
+detail::numUpVotedAmendments()
 {
-    return featureCollections.upVotedAmendments();
+    return featureCollections.numUpVotedAmendments();
 }
 
 //------------------------------------------------------------------------------
@@ -289,11 +284,11 @@ featureToName(uint256 const& f)
 // All known amendments must be registered either here or below with the
 // "retired" amendments
 uint256 const
-    featureOwnerPaysFee             = registerFeature("OwnerPaysFee", Supported::no, DefaultVote::no),
+    featureOwnerPaysFee             = registerFeature("OwnerPaysFee", Supported::no, DefaultVote::abstain),
     featureFlow                     = registerFeature("Flow", Supported::yes, DefaultVote::yes),
-    featureCompareTakerFlowCross    = registerFeature("CompareTakerFlowCross", Supported::no, DefaultVote::no),
+    featureCompareTakerFlowCross    = registerFeature("CompareTakerFlowCross", Supported::no, DefaultVote::abstain),
     featureFlowCross                = registerFeature("FlowCross", Supported::yes, DefaultVote::yes),
-    featureCryptoConditionsSuite    = registerFeature("CryptoConditionsSuite", Supported::yes, DefaultVote::no),
+    featureCryptoConditionsSuite    = registerFeature("CryptoConditionsSuite", Supported::yes, DefaultVote::abstain),
     fix1513                         = registerFeature("fix1513", Supported::yes, DefaultVote::yes),
     featureDepositAuth              = registerFeature("DepositAuth", Supported::yes, DefaultVote::yes),
     featureChecks                   = registerFeature("Checks", Supported::yes, DefaultVote::yes),
@@ -317,7 +312,7 @@ uint256 const
     fix1781                         = registerFeature("fix1781", Supported::yes, DefaultVote::yes),
     featureHardenedValidations      = registerFeature("HardenedValidations", Supported::yes, DefaultVote::yes),
     fixAmendmentMajorityCalc        = registerFeature("fixAmendmentMajorityCalc", Supported::yes, DefaultVote::yes),
-    featureNegativeUNL              = registerFeature("NegativeUNL", Supported::no, DefaultVote::no),
+    featureNegativeUNL              = registerFeature("NegativeUNL", Supported::no, DefaultVote::abstain),
     featureTicketBatch              = registerFeature("TicketBatch", Supported::yes, DefaultVote::yes),
     featureFlowSortStrands          = registerFeature("FlowSortStrands", Supported::yes, DefaultVote::yes),
     fixSTAmountCanonicalize         = registerFeature("fixSTAmountCanonicalize", Supported::yes, DefaultVote::yes),
@@ -329,21 +324,21 @@ uint256 const
 // ledger must be registered either here or above with the "active" amendments
 [[deprecated("The referenced amendment has been retired"), maybe_unused]]
 uint256 const
-    retiredMultiSign         = registerFeature("MultiSign", Supported::yes, DefaultVote::no),
-    retiredTrustSetAuth      = registerFeature("TrustSetAuth", Supported::yes, DefaultVote::no),
-    retiredFeeEscalation     = registerFeature("FeeEscalation", Supported::yes, DefaultVote::no),
-    retiredPayChan           = registerFeature("PayChan", Supported::yes, DefaultVote::no),
-    retiredCryptoConditions  = registerFeature("CryptoConditions", Supported::yes, DefaultVote::no),
-    retiredTickSize          = registerFeature("TickSize", Supported::yes, DefaultVote::no),
-    retiredFix1368           = registerFeature("fix1368", Supported::yes, DefaultVote::no),
-    retiredEscrow            = registerFeature("Escrow", Supported::yes, DefaultVote::no),
-    retiredFix1373           = registerFeature("fix1373", Supported::yes, DefaultVote::no),
-    retiredEnforceInvariants = registerFeature("EnforceInvariants", Supported::yes, DefaultVote::no),
-    retiredSortedDirectories = registerFeature("SortedDirectories", Supported::yes, DefaultVote::no),
-    retiredFix1201           = registerFeature("fix1201", Supported::yes, DefaultVote::no),
-    retiredFix1512           = registerFeature("fix1512", Supported::yes, DefaultVote::no),
-    retiredFix1523           = registerFeature("fix1523", Supported::yes, DefaultVote::no),
-    retiredFix1528           = registerFeature("fix1528", Supported::yes, DefaultVote::no);
+    retiredMultiSign         = registerFeature("MultiSign", Supported::yes, DefaultVote::abstain),
+    retiredTrustSetAuth      = registerFeature("TrustSetAuth", Supported::yes, DefaultVote::abstain),
+    retiredFeeEscalation     = registerFeature("FeeEscalation", Supported::yes, DefaultVote::abstain),
+    retiredPayChan           = registerFeature("PayChan", Supported::yes, DefaultVote::abstain),
+    retiredCryptoConditions  = registerFeature("CryptoConditions", Supported::yes, DefaultVote::abstain),
+    retiredTickSize          = registerFeature("TickSize", Supported::yes, DefaultVote::abstain),
+    retiredFix1368           = registerFeature("fix1368", Supported::yes, DefaultVote::abstain),
+    retiredEscrow            = registerFeature("Escrow", Supported::yes, DefaultVote::abstain),
+    retiredFix1373           = registerFeature("fix1373", Supported::yes, DefaultVote::abstain),
+    retiredEnforceInvariants = registerFeature("EnforceInvariants", Supported::yes, DefaultVote::abstain),
+    retiredSortedDirectories = registerFeature("SortedDirectories", Supported::yes, DefaultVote::abstain),
+    retiredFix1201           = registerFeature("fix1201", Supported::yes, DefaultVote::abstain),
+    retiredFix1512           = registerFeature("fix1512", Supported::yes, DefaultVote::abstain),
+    retiredFix1523           = registerFeature("fix1523", Supported::yes, DefaultVote::abstain),
+    retiredFix1528           = registerFeature("fix1528", Supported::yes, DefaultVote::abstain);
 
 // clang-format on
 

@@ -136,11 +136,10 @@ class TxQ1_test : public beast::unit_test::suite
         for (auto i = env.current()->seq(); i <= 257; ++i)
             env.close();
         // The ledger after the flag ledger creates all the
-        // fee (1) and amendment (upVotedAmendments().size())
+        // fee (1) and amendment (numUpVotedAmendments())
         // pseudotransactions. The queue treats the fees on these
         // transactions as though they are ordinary transactions.
-        auto const flagPerLedger =
-            1 + ripple::detail::upVotedAmendments().size();
+        auto const flagPerLedger = 1 + ripple::detail::numUpVotedAmendments();
         auto const flagMaxQueue = ledgersInQueue * flagPerLedger;
         checkMetrics(env, 0, flagMaxQueue, 0, flagPerLedger, 256);
 
@@ -4157,7 +4156,7 @@ public:
             if (!getMajorityAmendments(*env.closed()).empty())
                 break;
         }
-        auto expectedPerLedger = ripple::detail::upVotedAmendments().size() + 1;
+        auto expectedPerLedger = ripple::detail::numUpVotedAmendments() + 1;
         checkMetrics(env, 0, 5 * expectedPerLedger, 0, expectedPerLedger, 256);
 
         // Now wait 2 weeks modulo 256 ledgers for the amendments to be
