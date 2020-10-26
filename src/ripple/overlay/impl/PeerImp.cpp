@@ -301,11 +301,11 @@ PeerImp::sendTxQueue()
     {
         protocol::TMHaveTransactions ht;
         std::for_each(txQueue_.begin(), txQueue_.end(), [&](auto const& hash) {
-            ht.add_hash(hash.data(), hash.size());
+            ht.add_hashes(hash.data(), hash.size());
         });
+        JLOG(p_journal_.debug()) << "sendTxQueue " << txQueue_.size();
         txQueue_.clear();
         send(std::make_shared<Message>(ht, protocol::mtHAVE_TRANSACTIONS));
-        JLOG(p_journal_.debug()) << "sendTxQueue " << txQueue_.size();
     }
 }
 
@@ -2577,14 +2577,14 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMHaveTransactions> const& m)
 
     std::weak_ptr<PeerImp> weak = shared_from_this();
     app_.getJobQueue().addJob(
-        jtMISSING_TXN, "haveTransactions", [weak, m](Job&) {
+        jtMISSING_TXN, "handleHaveTransactions", [weak, m](Job&) {
             if (auto peer = weak.lock())
-                peer->haveTransactions(m);
+                peer->handleHaveTransactions(m);
         });
 }
 
 void
-PeerImp::haveTransactions(
+PeerImp::handleHaveTransactions(
     std::shared_ptr<protocol::TMHaveTransactions> const& m)
 {
     protocol::TMGetObjectByHash tmBH;
@@ -2592,11 +2592,11 @@ PeerImp::haveTransactions(
     tmBH.set_query(true);
 
     JLOG(p_journal_.debug())
-        << "received TMHaveTransactions " << m->hash_size();
+        << "received TMHaveTransactions " << m->hashes_size();
 
-    for (std::uint32_t i = 0; i < m->hash_size(); i++)
+    for (std::uint32_t i = 0; i < m->hashes_size(); i++)
     {
-        if (!stringIsUint256Sized(m->hash(i)))
+        if (!stringIsUint256Sized(m->hashes(i)))
         {
             JLOG(p_journal_.error())
                 << "TMHaveTransactions with invalid hash size";
@@ -2604,7 +2604,7 @@ PeerImp::haveTransactions(
             return;
         }
 
-        uint256 hash(m->hash(i));
+        uint256 hash(m->hashes(i));
 
         auto txn = app_.getMasterTransaction().fetch_from_cache(hash);
 
