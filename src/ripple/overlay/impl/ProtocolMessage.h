@@ -109,6 +109,10 @@ protocolMessageName(int type)
             return "replay_delta_request";
         case protocol::mtREPLAY_DELTA_RESPONSE:
             return "replay_delta_response";
+        case protocol::mtSTART_PROTOCOL:
+            return "start_protocol";
+        case protocol::mtGRACEFUL_CLOSE:
+            return "graceful_close";
         default:
             break;
     }
@@ -479,6 +483,14 @@ invokeProtocolMessage(
             break;
         case protocol::mtREPLAY_DELTA_RESPONSE:
             success = detail::invoke<protocol::TMReplayDeltaResponse>(
+                *header, buffers, handler);
+            break;
+        case protocol::mtSTART_PROTOCOL:
+            success = detail::invoke<protocol::TMStartProtocol>(
+                *header, buffers, handler);
+            break;
+        case protocol::mtGRACEFUL_CLOSE:
+            success = detail::invoke<protocol::TMGracefulClose>(
                 *header, buffers, handler);
             break;
         default:

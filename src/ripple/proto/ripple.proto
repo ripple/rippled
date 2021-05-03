@@ -29,6 +29,8 @@ enum MessageType
     mtPROOF_PATH_RESPONSE   = 58;
     mtREPLAY_DELTA_REQ      = 59;
     mtREPLAY_DELTA_RESPONSE = 60;
+    mtSTART_PROTOCOL        = 61;
+    mtGRACEFUL_CLOSE        = 62;
 }
 
 // token, iterations, target, challenge = issue demand for proof of work
@@ -404,5 +406,26 @@ message TMReplayDeltaResponse
     optional bytes ledgerHeader = 2;
     repeated bytes transaction = 3;
     optional TMReplyError error = 4;
+}
+
+message TMStartProtocol
+{
+    required uint64 startTime = 1;
+}
+
+enum TMCloseReason
+{
+    crMALFORMED_HANDSHAKE1 = 1;
+    crMALFORMED_HANDSHAKE2 = 2;
+    crMALFORMED_HANDSHAKE3 = 3;
+    crCHARGE_RESOURCES     = 4;
+    crLARGE_SENDQUEUE      = 5;
+    crNOT_USEFUL           = 6;
+    crPING_TIMEOUT         = 7;
+}
+
+message TMGracefulClose
+{
+    required TMCloseReason reason = 1;
 }
 
