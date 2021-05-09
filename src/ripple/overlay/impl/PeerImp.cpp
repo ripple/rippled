@@ -662,8 +662,6 @@ PeerImp::fail(protocol::TMCloseReason reason)
     protocol::TMGracefulClose tmGC;
     tmGC.set_reason(reason);
     send(std::make_shared<Message>(tmGC, protocol::mtGRACEFUL_CLOSE));
-
-    close();
 }
 
 void
@@ -962,13 +960,12 @@ PeerImp::onWriteMessage(error_code ec, std::size_t bytes_transferred)
 {
     if (!socket_.is_open())
         return;
-    if (closeOnWriteComplete_)
+    if (ec == boost::asio::error::operation_aborted)
     {
-        close();
+        if (closeOnWriteComplete_)
+            close();
         return;
     }
-    if (ec == boost::asio::error::operation_aborted)
-        return;
     if (ec)
         return fail("onWriteMessage", ec);
     if (auto stream = journal_.trace())
@@ -982,6 +979,11 @@ PeerImp::onWriteMessage(error_code ec, std::size_t bytes_transferred)
     metrics_.sent.add_message(bytes_transferred);
 
     assert(!send_queue_.empty());
+    if (send_queue_.front()->getType() == protocol::mtGRACEFUL_CLOSE)
+    {
+        close();
+        return;
+    }
     send_queue_.pop();
     if (!send_queue_.empty())
     {
