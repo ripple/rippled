@@ -175,6 +175,8 @@ private:
     bool vpReduceRelayEnabled_ = false;
     bool ledgerReplayEnabled_ = false;
     LedgerReplayMsgHandler ledgerReplayMsgHandler_;
+    // close connection when async write is complete
+    bool closeOnWriteComplete_ = false;
 
     friend class OverlayImpl;
 
@@ -230,11 +232,9 @@ public:
 
     /** Create outgoing, handshaked peer. */
     // VFALCO legacyPublicKey should be implied by the Slot
-    template <class Buffers>
     PeerImp(
         Application& app,
         std::unique_ptr<stream_type>&& stream_ptr,
-        Buffers const& buffers,
         std::shared_ptr<PeerFinder::Slot>&& slot,
         http_response_type&& response,
         Resource::Consumer usage,
@@ -395,7 +395,7 @@ public:
     isHighLatency() const override;
 
     void
-    fail(std::string const& reason);
+    fail(protocol::TMCloseReason reason);
 
     /** Return a range set of known shard indexes from this peer. */
     std::optional<RangeSet<std::uint32_t>>
@@ -437,9 +437,6 @@ private:
     // Called when SSL shutdown completes
     void
     onShutdown(error_code ec);
-
-    void
-    doAccept();
 
     std::string
     name() const;
@@ -540,6 +537,10 @@ public:
     onMessage(std::shared_ptr<protocol::TMReplayDeltaRequest> const& m);
     void
     onMessage(std::shared_ptr<protocol::TMReplayDeltaResponse> const& m);
+    void
+    onMessage(std::shared_ptr<protocol::TMStartProtocol> const& m);
+    void
+    onMessage(std::shared_ptr<protocol::TMGracefulClose> const& m);
 
 private:
     //--------------------------------------------------------------------------
@@ -579,75 +580,12 @@ private:
 
     void
     getLedger(std::shared_ptr<protocol::TMGetLedger> const& packet);
+
+    void
+    onStartProtocol();
 };
 
 //------------------------------------------------------------------------------
-
-template <class Buffers>
-PeerImp::PeerImp(
-    Application& app,
-    std::unique_ptr<stream_type>&& stream_ptr,
-    Buffers const& buffers,
-    std::shared_ptr<PeerFinder::Slot>&& slot,
-    http_response_type&& response,
-    Resource::Consumer usage,
-    PublicKey const& publicKey,
-    ProtocolVersion protocol,
-    id_t id,
-    OverlayImpl& overlay)
-    : Child(overlay)
-    , app_(app)
-    , id_(id)
-    , sink_(app_.journal("Peer"), makePrefix(id))
-    , p_sink_(app_.journal("Protocol"), makePrefix(id))
-    , journal_(sink_)
-    , p_journal_(p_sink_)
-    , stream_ptr_(std::move(stream_ptr))
-    , socket_(stream_ptr_->next_layer().socket())
-    , stream_(*stream_ptr_)
-    , strand_(socket_.get_executor())
-    , timer_(waitable_timer{socket_.get_executor()})
-    , remote_address_(slot->remote_endpoint())
-    , overlay_(overlay)
-    , inbound_(false)
-    , protocol_(protocol)
-    , tracking_(Tracking::unknown)
-    , trackingTime_(clock_type::now())
-    , publicKey_(publicKey)
-    , lastPingTime_(clock_type::now())
-    , creationTime_(clock_type::now())
-    , squelch_(app_.journal("Squelch"))
-    , usage_(usage)
-    , fee_(Resource::feeLightPeer)
-    , slot_(std::move(slot))
-    , response_(std::move(response))
-    , headers_(response_)
-    , compressionEnabled_(
-          peerFeatureEnabled(
-              headers_,
-              FEATURE_COMPR,
-              "lz4",
-              app_.config().COMPRESSION)
-              ? Compressed::On
-              : Compressed::Off)
-    , vpReduceRelayEnabled_(peerFeatureEnabled(
-          headers_,
-          FEATURE_VPRR,
-          app_.config().VP_REDUCE_RELAY_ENABLE))
-    , ledgerReplayEnabled_(peerFeatureEnabled(
-          headers_,
-          FEATURE_LEDGER_REPLAY,
-          app_.config().LEDGER_REPLAY))
-    , ledgerReplayMsgHandler_(app, app.getLedgerReplayer())
-{
-    read_buffer_.commit(boost::asio::buffer_copy(
-        read_buffer_.prepare(boost::asio::buffer_size(buffers)), buffers));
-    JLOG(journal_.debug()) << "compression enabled "
-                           << (compressionEnabled_ == Compressed::On)
-                           << " vp reduce-relay enabled "
-                           << vpReduceRelayEnabled_ << " on " << remote_address_
-                           << " " << id_;
-}
 
 template <class FwdIt, class>
 void
