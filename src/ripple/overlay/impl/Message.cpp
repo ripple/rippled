@@ -86,6 +86,7 @@ Message::compress()
             case protocol::mtVALIDATORLIST:
             case protocol::mtVALIDATORLISTCOLLECTION:
             case protocol::mtREPLAY_DELTA_RESPONSE:
+            case protocol::mtTRANSACTIONS:
                 return true;
             case protocol::mtPING:
             case protocol::mtCLUSTER:
@@ -100,6 +101,7 @@ Message::compress()
             case protocol::mtPROOF_PATH_REQ:
             case protocol::mtPROOF_PATH_RESPONSE:
             case protocol::mtREPLAY_DELTA_REQ:
+            case protocol::mtHAVE_TRANSACTIONS:
                 break;
         }
         return false;
