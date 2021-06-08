@@ -24,6 +24,7 @@
 #include <ripple/app/tx/impl/ApplyContext.h>
 #include <ripple/basics/XRPAmount.h>
 #include <ripple/beast/utility/Journal.h>
+#include <utility>
 
 namespace ripple {
 
@@ -82,8 +83,20 @@ public:
 class TxConsequences;
 struct PreflightResult;
 
+/** Represents the entry in a singer list */
+using SignerEntry = std::pair<AccountID, std::uint16_t>;
+
 class Transactor
 {
+protected:
+    /** Deserialize the array of signer entries.
+
+        @param obj the object containing the signer list as sfSignerEntries
+        @return A list with signers if success. The empty result is an error.
+    */
+    static std::vector<SignerEntry>
+    deserializeSignerList(STObject const& obj);
+
 protected:
     ApplyContext& ctx_;
     beast::Journal const j_;
