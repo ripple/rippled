@@ -11,6 +11,7 @@ if (is_root_project) # NuDB not needed in the case of xrpl_core inclusion build
   if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.11)
     FetchContent_Declare(
       nudb_src
+      SOURCE_DIR ${nih_src_path}/nudb
       GIT_REPOSITORY https://github.com/CPPAlliance/NuDB.git
       GIT_TAG        2.0.5
     )
@@ -22,6 +23,7 @@ if (is_root_project) # NuDB not needed in the case of xrpl_core inclusion build
   else ()
     ExternalProject_Add (nudb_src
       PREFIX ${nih_cache_path}
+      SOURCE_DIR ${nih_src_path}/nudb
       GIT_REPOSITORY https://github.com/CPPAlliance/NuDB.git
       GIT_TAG 2.0.5
       CONFIGURE_COMMAND ""

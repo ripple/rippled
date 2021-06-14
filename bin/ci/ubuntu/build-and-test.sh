@@ -21,7 +21,8 @@ echo "BUILD TYPE: ${BUILD_TYPE}"
 echo "BUILD TARGET: ${TARGET}"
 
 JOBS=${NUM_PROCESSORS:-2}
-if [[ ${TRAVIS:-false} != "true" ]]; then
+if [[ ${TRAVIS:-false} != "true" && ${GITHUB_ACTIONS:-false} != "true" ]]
+then
     JOBS=$((JOBS+1))
 fi
 
@@ -63,7 +64,7 @@ if version_ge $CMAKE_VER "3.12.0" ; then
     BUILDARGS+=" --parallel"
 fi
 
-if [[ ${NINJA_BUILD:-} == false ]]; then
+if [[ ${NINJA_BUILD:-} != true ]]; then
     if version_ge $CMAKE_VER "3.12.0" ; then
         BUILDARGS+=" ${JOBS}"
     else
@@ -76,7 +77,7 @@ if [[ ${VERBOSE_BUILD:-} == true ]]; then
     if version_ge $CMAKE_VER "3.14.0" ; then
         BUILDARGS+=" --verbose"
     else
-        if [[ ${NINJA_BUILD:-} == false ]]; then
+        if [[ ${NINJA_BUILD:-} != true ]]; then
             BUILDTOOLARGS+=" verbose=1"
         else
             BUILDTOOLARGS+=" -v"
@@ -84,7 +85,7 @@ if [[ ${VERBOSE_BUILD:-} == true ]]; then
     fi
 fi
 
-if [[ ${USE_CCACHE:-} == true ]]; then
+if [[ ${USE_CCACHE:-} == true ]] && type -a ccache; then
     echo "using ccache with basedir [${CCACHE_BASEDIR:-}]"
     CMAKE_EXTRA_ARGS+=" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
 fi
@@ -112,15 +113,21 @@ done
 
 # generate
 ${time} cmake ../.. -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ${CMAKE_EXTRA_ARGS}
-# Display the cmake output, to help with debugging if something fails
-for file in CMakeOutput.log CMakeError.log
-do
-  if [ -f CMakeFiles/${file} ]
-  then
-    ls -l CMakeFiles/${file}
-    cat CMakeFiles/${file}
-  fi
-done
+
+# Display the cmake output, to help with debugging if something fails,
+# unless this is running under a Github action. They have another
+# mechanism to dump the logs.
+if [[ ! -v GITHUB_ACTIONS || "${GITHUB_ACTIONS}" != "true" ]]
+then
+    for file in CMakeOutput.log CMakeError.log
+    do
+      if [ -f CMakeFiles/${file} ]
+      then
+        ls -l CMakeFiles/${file}
+        cat CMakeFiles/${file}
+      fi
+    done
+fi
 # build
 export DESTDIR=$(pwd)/_INSTALLED_
 
@@ -153,43 +160,14 @@ ldd ${APP_PATH}
 if [[ "${TARGET}" == "validator-keys" ]] ; then
     APP_ARGS="--unittest"
 else
-    function join_by { local IFS="$1"; shift; echo "$*"; }
-
-    # This is a list of manual tests
-    # in rippled that we want to run
-    # ORDER matters here...sorted in approximately
-    # descending execution time (longest running tests at top)
-    declare -a manual_tests=(
-        'ripple.ripple_data.reduce_relay_simulate'
-        'ripple.tx.Offer_manual'
-        'ripple.tx.CrossingLimits'
-        'ripple.tx.PlumpBook'
-        'ripple.app.Flow_manual'
-        'ripple.tx.OversizeMeta'
-        'ripple.consensus.DistributedValidators'
-        'ripple.app.NoRippleCheckLimits'
-        'ripple.ripple_data.compression'
-        'ripple.NodeStore.Timing'
-        'ripple.consensus.ByzantineFailureSim'
-        'beast.chrono.abstract_clock'
-        'beast.unit_test.print'
-    )
-    if [[ ${TRAVIS:-false} != "true" ]]; then
-        # these two tests cause travis CI to run out of memory.
-        # TODO: investigate possible workarounds.
-        manual_tests=(
-            'ripple.consensus.ScaleFreeSim'
-            'ripple.tx.FindOversizeCross'
-            "${manual_tests[@]}"
-        )
-    fi
+    declare -a manual_tests=$( $(dirname "$0")/manual-tests.sh "${APP_PATH}" )
 
     if [[ ${MANUAL_TESTS:-} == true ]]; then
-        APP_ARGS+=" --unittest=$(join_by , "${manual_tests[@]}")"
+        APP_ARGS+=" --unittest=${manual_tests}"
     else
         APP_ARGS+=" --unittest --quiet --unittest-log"
     fi
-    if [[ ${coverage} == false && ${PARALLEL_TESTS:-} == true ]]; then
+    if [[ ${coverage} != true && ${PARALLEL_TESTS:-} == true ]]; then
         APP_ARGS+=" --unittest-jobs ${JOBS}"
     fi
 
@@ -222,6 +200,17 @@ if [[ ${look_core} == true ]]; then
     before=$(ls -A1 ${coredir})
 fi
 
+if [[ -v MINTESTAVAIL && \
+  $( df  . --output=avail | tail -1 ) -lt ${MINTESTAVAIL} ]]
+then
+  echo Removing install dir for space: ${DESTDIR}
+  rm -rf ${DESTDIR}
+fi
+df -h
+du -sh ${CACHE_DIR}
+du -sh ${CCACHE_DIR} || true
+find ${NIH_CACHE_ROOT} -maxdepth 2 \( -iname src -prune -o -type d -exec du -sh {} \; \)
+find build -maxdepth 3 \( -iname src -prune -o -type d -exec du -sh {} \; \)
 set +e
 echo "Running tests for ${APP_PATH}"
 if [[ ${MANUAL_TESTS:-} == true && ${PARALLEL_TESTS:-} != true ]]; then
