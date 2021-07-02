@@ -148,6 +148,7 @@ detail::FeatureCollections::registerFeature(
     DefaultVote vote)
 {
     assert(!readOnly);
+    assert(support != Supported::no || vote != DefaultVote::yes);
     auto const i = nameToFeature.find(name);
     // Each feature should only be registered once
     assert(i == nameToFeature.end());
